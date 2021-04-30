@@ -48,15 +48,22 @@ impl Img {
     image_bytes: Vec<u8>,
     breed: String,
     file_name: String,
-  ) -> Result<(), Error> {
+  ) -> Result<String, Error> {
     let loaded_image = image::load_from_memory(&image_bytes)?;
     if !Path::new("./Dogs/").exists() {
       fs::create_dir("./Dogs").expect("Cant create Dogs dir");
     }
-    let path_str = format!("./Dogs/dog_{}_{}.jpeg", breed, file_name);
-    let path = Path::new(&path_str);
+    let path_string = format!("./Dogs/dog_{}_{}", breed, file_name);
+    let path = Path::new(&path_string);
     loaded_image.save_with_format(path, image::ImageFormat::Jpeg)?;
-    Ok(())
+    Ok(
+      path
+        .file_name()
+        .expect("Cant get file name from path")
+        .to_os_string()
+        .into_string()
+        .expect("Cant parse OsString"),
+    )
   }
 
   async fn get_dog_img(

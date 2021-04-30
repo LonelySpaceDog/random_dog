@@ -1,9 +1,9 @@
-#[path = "image_util.rs"]
-mod image_util;
 #[path = "button_style.rs"]
 mod button_style;
 #[path = "error.rs"]
 mod error;
+#[path = "image_util.rs"]
+mod image_util;
 
 use iced::{
   button, Align, Application, Button, Clipboard, Column, Command, Container,
@@ -28,6 +28,7 @@ pub enum RandomDog {
   },
   Saving,
   Saved {
+    file_name: String,
     search: button::State,
   },
 }
@@ -37,7 +38,7 @@ pub enum Message {
   ImgFound(Result<Img, Error>),
   Search,
   Saving((Vec<u8>, String, String)),
-  Saved(Result<(), Error>),
+  Saved(Result<String, Error>),
 }
 
 impl Application for RandomDog {
@@ -98,8 +99,9 @@ impl Application for RandomDog {
         *self = RandomDog::Saving;
         Command::perform(Img::save(img_buf, breed, file_name), Message::Saved)
       }
-      Message::Saved(Ok(())) => {
+      Message::Saved(Ok(file_name)) => {
         *self = RandomDog::Saved {
+          file_name,
           search: button::State::new(),
         };
         Command::none()
@@ -137,8 +139,11 @@ impl Application for RandomDog {
                   .on_press(Message::Search),
               )
               .push(
-                button_save(save, "Save this dog")
-                  .on_press(Message::Saving((image_bytes, breed,file_name))),
+                button_save(save, "Save this dog").on_press(Message::Saving((
+                  image_bytes,
+                  breed,
+                  file_name,
+                ))),
               ),
           )
       }
@@ -150,10 +155,11 @@ impl Application for RandomDog {
       RandomDog::Saving { .. } => {
         Column::new().push(Text::new("Saving Dog...").size(20))
       }
-      RandomDog::Saved { search } => Column::new()
+      RandomDog::Saved { file_name, search } => Column::new()
         .spacing(20)
         .align_items(Align::Center)
-        .push(Text::new("Dog has been saved").size(20))
+        .push(Text::new("Dog has been saved as").size(20))
+        .push(Text::new(file_name.as_str()).size(30))
         .push(
           button_search(search, "Search for new Dog").on_press(Message::Search),
         ),
