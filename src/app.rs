@@ -1,10 +1,11 @@
 #[path = "button_style.rs"]
 mod button_style;
 use json;
+use image;
 use reqwest;
 use iced::{
-  image, button, Align, Application, Button, Clipboard, Column, Command,
-  Container, Element, Length, Row, Text,
+  button, Align, Application, Button, Clipboard, Column, Command, Container,
+  Element, Length, Row, Text,
 };
 
 use button_style::style;
@@ -15,17 +16,24 @@ pub enum RandomDog {
   Loaded {
     img: Img,
     search: button::State,
+    save: button::State,
   },
   Errored {
     error: Error,
     try_again: button::State,
   },
+  Saving {
+    img: Img,
+  },
+  Saved,
 }
 
 #[derive(Debug, Clone)]
 pub enum Message {
   ImgFound(Result<Img, Error>),
   Search,
+  Saving,
+  Saved,
 }
 
 impl Application for RandomDog {
@@ -43,8 +51,10 @@ impl Application for RandomDog {
   fn title(&self) -> String {
     let subtitle = match self {
       RandomDog::Loading => "Loading",
-      RandomDog::Loaded { img, .. } => &img.name,
+      RandomDog::Loaded { img, .. } => &img.breed,
       RandomDog::Errored { .. } => "Somthing went wrong!",
+      RandomDog::Saving { .. } => "Saving",
+      RandomDog::Saved => "Dog saved on your computer",
     };
 
     format!("{} - Random Dog", subtitle)
@@ -60,6 +70,7 @@ impl Application for RandomDog {
         *self = RandomDog::Loaded {
           img,
           search: button::State::new(),
+          save: button::State::new(),
         };
 
         Command::none()
@@ -79,6 +90,8 @@ impl Application for RandomDog {
           Command::perform(Img::search(), Message::ImgFound)
         }
       },
+      Message::Saving => Command::none(),
+      Message::Saved => Command::none(),
     }
   }
 
@@ -87,17 +100,22 @@ impl Application for RandomDog {
       RandomDog::Loading => Column::new()
         .width(Length::Shrink)
         .push(Text::new("Searching for Dog...").size(40)),
-      RandomDog::Loaded { img, search } => Column::new()
+      RandomDog::Loaded { img, search, save } => Column::new()
         .max_width(500)
         .spacing(20)
-        .align_items(Align::End)
+        .align_items(Align::Start)
         .push(img.view())
-        .push(button(search, "Keep searching!").on_press(Message::Search)),
+        .push(
+          button_search(search, "Keep searching!").on_press(Message::Search),
+        )
+        .push(button_save(save, "Save this dog").on_press(Message::Saving)),
       RandomDog::Errored { try_again, .. } => Column::new()
         .spacing(20)
         .align_items(Align::End)
         .push(Text::new("Somthing is not right...").size(40))
-        .push(button(try_again, "Try again").on_press(Message::Search)),
+        .push(button_search(try_again, "Try again").on_press(Message::Search)),
+      RandomDog::Saving {..} => {todo!()},
+      RandomDog::Saved  => {todo!()},
     };
 
     Container::new(content)
@@ -111,9 +129,10 @@ impl Application for RandomDog {
 
 #[derive(Debug, Clone)]
 pub struct Img {
-  name: String,
-  image: image::Handle,
-  image_viewer: image::viewer::State,
+  breed: String,
+  image: iced::image::Handle,
+  image_bytes: Vec<u8>,
+  image_viewer: iced::image::viewer::State,
 }
 
 #[derive(Debug, Clone)]
@@ -126,7 +145,7 @@ impl Img {
     Row::new()
       .spacing(20)
       .align_items(iced::Align::Center)
-      .push(image::Viewer::new(
+      .push(iced::image::Viewer::new(
         &mut self.image_viewer,
         self.image.clone(),
       ))
@@ -134,15 +153,18 @@ impl Img {
   }
 
   async fn search() -> Result<Img, Error> {
-    let image = Self::get_dog_img().await?;
+    let (image, image_bytes): (iced::image::Handle, Vec<u8>) =
+      Self::get_dog_img().await?;
     Ok(Img {
-      name: String::from("Dog"),
+      breed: String::from("any"),
       image,
-      image_viewer: image::viewer::State::new(),
+      image_bytes,
+      image_viewer: iced::image::viewer::State::new(),
     })
   }
 
-  async fn get_dog_img() -> Result<image::Handle, reqwest::Error> {
+  async fn get_dog_img(
+  ) -> Result<(iced::image::Handle, Vec<u8>), reqwest::Error> {
     let url = "https://dog.ceo/api/breeds/image/random";
     let res = reqwest::get(url).await?.text().await?;
     let img_bytes = reqwest::get(
@@ -153,13 +175,28 @@ impl Img {
     .await?
     .as_ref()
     .to_vec();
-    Ok(image::Handle::from_memory(img_bytes))
+    Ok((
+      iced::image::Handle::from_memory(img_bytes.clone()),
+      img_bytes,
+    ))
   }
 }
 
-fn button<'a>(state: &'a mut button::State, text: &str) -> Button<'a, Message> {
+fn button_search<'a>(
+  state: &'a mut button::State,
+  text: &str,
+) -> Button<'a, Message> {
   Button::new(state, Text::new(text))
     .padding(10)
+    .style(style::Button::Primary)
+}
+
+fn button_save<'a>(
+  state: &'a mut button::State,
+  text: &str,
+) -> Button<'a, Message> {
+  Button::new(state, Text::new(text))
+    .padding(20)
     .style(style::Button::Primary)
 }
 
