@@ -6,7 +6,5 @@ Works only with Linux
 #TODO
 
 Implement all features of Dog API: 
-
--Get dogs by breed 
-
--Get severel Images
+- Get dogs by breed 
+- Get severel Images
