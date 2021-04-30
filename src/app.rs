@@ -1,13 +1,17 @@
+#[path = "image_util.rs"]
+mod image_util;
 #[path = "button_style.rs"]
 mod button_style;
-use json;
-use image;
-use reqwest;
+#[path = "error.rs"]
+mod error;
+
 use iced::{
   button, Align, Application, Button, Clipboard, Column, Command, Container,
   Element, Length, Row, Text,
 };
 
+use image_util::Img;
+use error::Error;
 use button_style::style;
 
 #[derive(Debug)]
@@ -22,18 +26,18 @@ pub enum RandomDog {
     error: Error,
     try_again: button::State,
   },
-  Saving {
-    img: Img,
+  Saving,
+  Saved {
+    search: button::State,
   },
-  Saved,
 }
 
 #[derive(Debug, Clone)]
 pub enum Message {
   ImgFound(Result<Img, Error>),
   Search,
-  Saving,
-  Saved,
+  Saving((Vec<u8>, String, String)),
+  Saved(Result<(), Error>),
 }
 
 impl Application for RandomDog {
@@ -54,7 +58,7 @@ impl Application for RandomDog {
       RandomDog::Loaded { img, .. } => &img.breed,
       RandomDog::Errored { .. } => "Somthing went wrong!",
       RandomDog::Saving { .. } => "Saving",
-      RandomDog::Saved => "Dog saved on your computer",
+      RandomDog::Saved { .. } => "Dog saved on your computer",
     };
 
     format!("{} - Random Dog", subtitle)
@@ -90,8 +94,24 @@ impl Application for RandomDog {
           Command::perform(Img::search(), Message::ImgFound)
         }
       },
-      Message::Saving => Command::none(),
-      Message::Saved => Command::none(),
+      Message::Saving((img_buf, breed, file_name)) => {
+        *self = RandomDog::Saving;
+        Command::perform(Img::save(img_buf, breed, file_name), Message::Saved)
+      }
+      Message::Saved(Ok(())) => {
+        *self = RandomDog::Saved {
+          search: button::State::new(),
+        };
+        Command::none()
+      }
+      Message::Saved(Err(error)) => {
+        *self = RandomDog::Errored {
+          error,
+          try_again: button::State::new(),
+        };
+
+        Command::none()
+      }
     }
   }
 
@@ -100,22 +120,43 @@ impl Application for RandomDog {
       RandomDog::Loading => Column::new()
         .width(Length::Shrink)
         .push(Text::new("Searching for Dog...").size(40)),
-      RandomDog::Loaded { img, search, save } => Column::new()
-        .max_width(500)
-        .spacing(20)
-        .align_items(Align::Start)
-        .push(img.view())
-        .push(
-          button_search(search, "Keep searching!").on_press(Message::Search),
-        )
-        .push(button_save(save, "Save this dog").on_press(Message::Saving)),
+      RandomDog::Loaded { img, search, save } => {
+        let image_bytes = img.image_bytes.clone();
+        let breed = img.breed.clone();
+        let file_name = img.file_name.clone();
+        Column::new()
+          .max_width(500)
+          .spacing(20)
+          .align_items(Align::Start)
+          .push(img.view())
+          .push(
+            Row::new()
+              .spacing(20)
+              .push(
+                button_search(search, "Keep searching!")
+                  .on_press(Message::Search),
+              )
+              .push(
+                button_save(save, "Save this dog")
+                  .on_press(Message::Saving((image_bytes, breed,file_name))),
+              ),
+          )
+      }
       RandomDog::Errored { try_again, .. } => Column::new()
         .spacing(20)
         .align_items(Align::End)
         .push(Text::new("Somthing is not right...").size(40))
         .push(button_search(try_again, "Try again").on_press(Message::Search)),
-      RandomDog::Saving {..} => {todo!()},
-      RandomDog::Saved  => {todo!()},
+      RandomDog::Saving { .. } => {
+        Column::new().push(Text::new("Saving Dog...").size(20))
+      }
+      RandomDog::Saved { search } => Column::new()
+        .spacing(20)
+        .align_items(Align::Center)
+        .push(Text::new("Dog has been saved").size(20))
+        .push(
+          button_search(search, "Search for new Dog").on_press(Message::Search),
+        ),
     };
 
     Container::new(content)
@@ -124,61 +165,6 @@ impl Application for RandomDog {
       .center_x()
       .center_y()
       .into()
-  }
-}
-
-#[derive(Debug, Clone)]
-pub struct Img {
-  breed: String,
-  image: iced::image::Handle,
-  image_bytes: Vec<u8>,
-  image_viewer: iced::image::viewer::State,
-}
-
-#[derive(Debug, Clone)]
-pub enum Error {
-  APIError,
-}
-
-impl Img {
-  fn view(&mut self) -> Element<Message> {
-    Row::new()
-      .spacing(20)
-      .align_items(iced::Align::Center)
-      .push(iced::image::Viewer::new(
-        &mut self.image_viewer,
-        self.image.clone(),
-      ))
-      .into()
-  }
-
-  async fn search() -> Result<Img, Error> {
-    let (image, image_bytes): (iced::image::Handle, Vec<u8>) =
-      Self::get_dog_img().await?;
-    Ok(Img {
-      breed: String::from("any"),
-      image,
-      image_bytes,
-      image_viewer: iced::image::viewer::State::new(),
-    })
-  }
-
-  async fn get_dog_img(
-  ) -> Result<(iced::image::Handle, Vec<u8>), reqwest::Error> {
-    let url = "https://dog.ceo/api/breeds/image/random";
-    let res = reqwest::get(url).await?.text().await?;
-    let img_bytes = reqwest::get(
-      json::parse(&res).expect("Parse error")["message"].to_string(),
-    )
-    .await?
-    .bytes()
-    .await?
-    .as_ref()
-    .to_vec();
-    Ok((
-      iced::image::Handle::from_memory(img_bytes.clone()),
-      img_bytes,
-    ))
   }
 }
 
@@ -196,14 +182,6 @@ fn button_save<'a>(
   text: &str,
 ) -> Button<'a, Message> {
   Button::new(state, Text::new(text))
-    .padding(20)
+    .padding(10)
     .style(style::Button::Primary)
-}
-
-impl From<reqwest::Error> for Error {
-  fn from(error: reqwest::Error) -> Error {
-    dbg!(error);
-
-    Error::APIError
-  }
 }
