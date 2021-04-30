@@ -1,7 +1,7 @@
 # random_dog
 Random dog picture with gui based on [Dog API](https://dog.ceo/dog-api/)
 
-Tested only on Linux
+Fully tested only on Linux
 
 # TODO
 
