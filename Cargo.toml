@@ -1,0 +1,13 @@
+[package]
+name = "random_dog_sandbox"
+version = "0.1.0"
+authors = ["Viacheslav Vasiliev <megbegbonok@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+serde_json = "~1.0.64"
+reqwest = {version = "~0.11.3", features = ["json", "blocking"]}
+druid = {version = "~0.7", features = ["image", "jpeg"]}
+druid-derive = "~0.4"
