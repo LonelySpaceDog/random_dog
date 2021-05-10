@@ -1,12 +1,14 @@
-use reqwest::Error as reqwest_error;
+use reqwest::Error as ReqwestError;
 #[derive(Debug)]
 pub enum Error {
-  ImageBufError,
+  ImageError,
   ReqwestError,
 }
 
-impl From<reqwest_error> for Error {
-  fn from(error: reqwest_error) -> Error {
+impl From<ReqwestError> for Error {
+  fn from(error: ReqwestError) -> Error {
+    dbg!(error);
+
     Self::ReqwestError
   }
 }
